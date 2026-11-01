@@ -233,7 +233,7 @@ public class MainActivity extends Activity {
             Cursor cursor = db.allForExport();
             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
             while (cursor.moveToNext()) {
-                csv.append(csv(formatter.format(new Date(cursor.getLong(0)))).append(',')
+                csv.append(csv(formatter.format(new Date(cursor.getLong(0))))).append(',')
                         .append(csv(cursor.getString(1))).append(',')
                         .append(csv(cursor.getString(2))).append(',')
                         .append(cursor.getDouble(3)).append(',')

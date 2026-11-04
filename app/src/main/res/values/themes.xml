@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Penny" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/penny_green</item>
+        <item name="android:navigationBarColor">@color/penny_cream</item>
+        <item name="android:statusBarColor">@color/penny_green_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/penny_cream</item>
+    </style>
+</resources>

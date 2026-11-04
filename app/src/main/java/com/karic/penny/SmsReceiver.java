@@ -1,0 +1,20 @@
+package com.karic.penny;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.provider.Telephony;
+import android.telephony.SmsMessage;
+
+public class SmsReceiver extends BroadcastReceiver {
+    @Override public void onReceive(Context context, Intent intent) {
+        if (!Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) return;
+        Bundle extras = intent.getExtras(); if (extras == null) return;
+        SmsMessage[] messages = Telephony.Sms.Intents.getMessagesFromIntent(intent);
+        StringBuilder body = new StringBuilder(); String sender = "Unknown"; long time = System.currentTimeMillis();
+        for (SmsMessage msg : messages) { sender = msg.getOriginatingAddress(); body.append(msg.getMessageBody()); time = msg.getTimestampMillis(); }
+        Transaction tx = TransactionParser.parse(sender, body.toString(), time);
+        if (tx != null) new PennyDatabase(context).insert(tx);
+    }
+}

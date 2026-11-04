@@ -1,0 +1,9 @@
+<resources>
+    <color name="penny_green">#166534</color>
+    <color name="penny_green_dark">#14532D</color>
+    <color name="penny_mint">#DCFCE7</color>
+    <color name="penny_cream">#FAFAF5</color>
+    <color name="penny_red">#B91C1C</color>
+    <color name="text_primary">#17201B</color>
+    <color name="white">#FFFFFF</color>
+</resources>

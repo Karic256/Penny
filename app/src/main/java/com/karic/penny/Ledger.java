@@ -201,10 +201,10 @@ public final class Ledger {
             for(Entry e:rows) {
                 Balance b=null;for(Balance r:e.reports)if(b==null||r.at>b.at)b=r;
                 if(b==null) {prior=null;continue;}
-                if(prior!=null&&prior.type.equals(b.type)&&b.at>prior.at&&e.counted()&&e.fee!=null) {
-                    BigDecimal expected=prior.value.add(e.credit()?e.amount:e.amount.negate()).subtract(e.fee);
-                    if(expected.subtract(b.value).abs().compareTo(new BigDecimal("1"))>=0) {
-                        String w="Reported balance difference UGX "+b.value.subtract(expected).toPlainString()+"; missing activity or a hold may explain it. No fee inferred.";
+                if(prior!=null&&prior.type.equals(b.type)&&b.at>prior.at&&e.counted()) {
+                    BigDecimal expected=prior.value.add(e.credit()?e.amount:e.amount.negate()).subtract(e.fee==null?ZERO:e.fee);
+                    if(expected.subtract(b.value).abs().compareTo(new BigDecimal("0.01"))>=0) {
+                        String w="Reported balance difference UGX "+b.value.subtract(expected).toPlainString()+"; missing activity, report precision or a hold may explain it. "+(e.fee==null?"Fee unknown. ":"")+"No fee inferred.";
                         e.warnings.add(w);a.warnings.add(w);
                     }
                 }

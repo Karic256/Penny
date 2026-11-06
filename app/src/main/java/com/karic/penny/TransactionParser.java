@@ -17,6 +17,9 @@ public final class TransactionParser {
     private TransactionParser() {}
 
     public static Transaction parse(String sender, String body, long receivedAt) {
+        return parse(sender,body,receivedAt,receivedAt);
+    }
+    public static Transaction parse(String sender, String body, long receivedAt,long sourceTime) {
         if (body == null || body.trim().isEmpty()) return null;
         String text = body.replace('\u00a0', ' ').replace('\u2212', '-').replaceAll("[\\t\\r\\n]+", " ").replaceAll("([+-])\\s+(?=\\d)", "$1");
         if (has(text, "\\b(?:OTP|one[ -]time password|verification code|PIN is)\\b")) return null;
@@ -27,7 +30,7 @@ public final class TransactionParser {
         t.sender = sender == null ? "Unknown sender" : sender;
         t.rawBody = body; t.receivedAt = receivedAt; t.timestamp = receivedAt;
         t.account = "unknown"; t.category = "Uncategorised";
-        t.sourceKey = hash(t.sender.toLowerCase(Locale.ROOT) + "|" + receivedAt + "|" + body.trim().replaceAll("\\s+", " "));
+        t.sourceKey = hash(t.sender.toLowerCase(Locale.ROOT) + "|" + sourceTime + "|" + body.trim().replaceAll("\\s+", " "));
         t.status = status(text);
         t.originalId = find("(?:original|reversal of|settlement of)(?:\\s+transaction)?(?:\\s+(?:id|ref(?:erence)?))?\\s*[:#=-]?\\s*([A-Z0-9][A-Z0-9/-]{4,})", text);
         // Remove relationship wording before looking for this event's own ID.

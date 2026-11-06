@@ -62,6 +62,15 @@ public class DeviceTest extends InstrumentationTestCase {
             getInstrumentation().waitForIdleSync();SystemClock.sleep(200);screenshot("04-sms-detail");
         } finally {getInstrumentation().runOnMainSync(a::finish);getInstrumentation().waitForIdleSync();}
     }
+    public void testReceiverThenInboxWithDifferentArrivalTimesIsIdempotent() {
+        try(PennyDatabase db=new PennyDatabase(context)) {
+            long sent=System.currentTimeMillis()-1000;
+            String body="MTN has deducted UGX 6500. Message: Bundle Purchase";
+            assertTrue(db.insertSms("MTN",body,sent+400,sent));
+            assertFalse(db.insertSms("MTN",body,sent+800,sent));
+            assertEquals(1,db.ledger().entries.size());
+        }
+    }
     private TextView find(View v,String exact){if(v instanceof TextView&&exact.contentEquals(((TextView)v).getText()))return (TextView)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){TextView t=find(((ViewGroup)v).getChildAt(i),exact);if(t!=null)return t;}return null;}
     private void screenshot(String name) throws Exception {
         Bitmap bitmap=getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(bitmap);

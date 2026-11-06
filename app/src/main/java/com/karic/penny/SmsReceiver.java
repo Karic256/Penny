@@ -19,7 +19,7 @@ public class SmsReceiver extends BroadcastReceiver {
         final PendingResult pending = goAsync();
         new Thread(() -> {
             try (PennyDatabase db = new PennyDatabase(context)) {
-                db.insertSms(origin, body.toString(), receivedAt);
+                db.insertSms(origin, body.toString(), System.currentTimeMillis(), receivedAt);
             } catch (RuntimeException ignored) {
                 // The inbox scan can recover this SMS; never log a private message body.
             } finally { pending.finish(); }

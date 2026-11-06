@@ -12,7 +12,7 @@ public class PennyDatabase extends SQLiteOpenHelper {
     public PennyDatabase(Context context) { super(context,"penny.db",null,2); }
     @Override public void onCreate(SQLiteDatabase db) { createSmsTables(db); }
     private void createSmsTables(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS financial_sms (source_key TEXT PRIMARY KEY, sender TEXT NOT NULL, body TEXT NOT NULL, received_at INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS financial_sms (source_key TEXT PRIMARY KEY, sender TEXT NOT NULL, body TEXT NOT NULL, received_at INTEGER NOT NULL, source_time INTEGER NOT NULL)");
         db.execSQL("CREATE INDEX IF NOT EXISTS sms_time ON financial_sms(received_at)");
         db.execSQL("CREATE TABLE IF NOT EXISTS corrections (entry_key TEXT PRIMARY KEY, category TEXT, internal INTEGER NOT NULL DEFAULT 0, peer TEXT)");
         db.execSQL("CREATE TABLE IF NOT EXISTS metadata (name TEXT PRIMARY KEY, value TEXT)");
@@ -23,15 +23,18 @@ public class PennyDatabase extends SQLiteOpenHelper {
         if(oldVersion<2)createSmsTables(db);
     }
     public boolean insertSms(String sender,String body,long receivedAt) {
-        Transaction t=TransactionParser.parse(sender,body,receivedAt);
+        return insertSms(sender,body,receivedAt,receivedAt);
+    }
+    public boolean insertSms(String sender,String body,long receivedAt,long sourceTime) {
+        Transaction t=TransactionParser.parse(sender,body,receivedAt,sourceTime);
         if(t==null)return false;
-        ContentValues v=new ContentValues();v.put("source_key",t.sourceKey);v.put("sender",t.sender);v.put("body",body);v.put("received_at",receivedAt);
+        ContentValues v=new ContentValues();v.put("source_key",t.sourceKey);v.put("sender",t.sender);v.put("body",body);v.put("received_at",receivedAt);v.put("source_time",sourceTime);
         return getWritableDatabase().insertWithOnConflict("financial_sms",null,v,SQLiteDatabase.CONFLICT_IGNORE)!=-1;
     }
     public Ledger ledger() {
         List<Transaction> rows=new ArrayList<>();
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT sender,body,received_at FROM financial_sms ORDER BY received_at,source_key",null)) {
-            while(c.moveToNext()) {Transaction t=TransactionParser.parse(c.getString(0),c.getString(1),c.getLong(2));if(t!=null)rows.add(t);}
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT sender,body,received_at,source_time FROM financial_sms ORDER BY received_at,source_key",null)) {
+            while(c.moveToNext()) {Transaction t=TransactionParser.parse(c.getString(0),c.getString(1),c.getLong(2),c.getLong(3));if(t!=null)rows.add(t);}
         }
         Map<String,Ledger.Edit> edits=new HashMap<>();
         try(Cursor c=getReadableDatabase().rawQuery("SELECT entry_key,category,internal,peer FROM corrections",null)) {

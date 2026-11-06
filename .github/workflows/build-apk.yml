@@ -45,11 +45,18 @@ jobs:
         timeout-minutes: 10
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/penny-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          trap 'tail -60 "$RUNNER_TEMP/penny-emulator.log" 2>/dev/null || true' EXIT
           sudo chmod 666 /dev/kvm
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "system-images;android-30;default;x86_64" "emulator" "platform-tools"
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name penny --package "system-images;android-30;default;x86_64" --force
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name penny --device pixel_5 --path "$ANDROID_AVD_HOME/penny.avd" --package "system-images;android-30;default;x86_64" --force
+          test -f "$ANDROID_AVD_HOME/penny.avd/config.ini"
+          printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-30\n' "$ANDROID_AVD_HOME/penny.avd" > "$ANDROID_AVD_HOME/penny.ini"
           "$ANDROID_HOME/emulator/emulator" -avd penny -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/penny-emulator.log" 2>&1 &
-          adb wait-for-device
+          timeout 120 adb wait-for-device
           for attempt in $(seq 1 60); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then break; fi
             sleep 3

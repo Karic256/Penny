@@ -197,9 +197,9 @@ public class MainActivity extends Activity {
             int imported=0;String problem=null;
             try(PennyDatabase db=new PennyDatabase(this)) {
                 db.getWritableDatabase().beginTransaction();
-                try(Cursor c=getContentResolver().query(Telephony.Sms.Inbox.CONTENT_URI,new String[]{Telephony.Sms.ADDRESS,Telephony.Sms.BODY,Telephony.Sms.DATE},null,null,Telephony.Sms.DATE+" ASC")) {
+                try(Cursor c=getContentResolver().query(Telephony.Sms.Inbox.CONTENT_URI,new String[]{Telephony.Sms.ADDRESS,Telephony.Sms.BODY,Telephony.Sms.DATE,Telephony.Sms.DATE_SENT},null,null,Telephony.Sms.DATE+" ASC")) {
                     if(c==null)throw new IllegalStateException("Inbox unavailable");
-                    while(c.moveToNext())if(db.insertSms(c.getString(0),c.getString(1),c.getLong(2)))imported++;
+                    while(c.moveToNext())if(db.insertSms(c.getString(0),c.getString(1),c.getLong(2),c.getLong(3)>0?c.getLong(3):c.getLong(2)))imported++;
                     db.markImport(System.currentTimeMillis());db.getWritableDatabase().setTransactionSuccessful();
                 }finally{db.getWritableDatabase().endTransaction();}
             }catch(Exception e){problem="SMS import failed; no partial import was saved. Check SMS permission.";}

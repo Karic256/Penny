@@ -141,7 +141,14 @@ public final class Ledger {
             if(t.description!=null && (e.title==null||t.description.length()>e.title.length()))e.title=t.description;
             if("MTN Data Bundle".equals(t.description))e.title=t.description;
             if("Airtime & Data".equals(t.category))e.category=t.category;
-            if(balanceStatus(t.status))for(Map.Entry<String,BigDecimal> report:t.reportedBalances.entrySet())balanceGroups.computeIfAbsent(t.status+":"+report.getKey(),k->new ArrayList<>()).add(new Balance(t,report.getKey(),report.getValue()));
+        }
+        for(Transaction t:sources) {
+            boolean statement=t.status==Transaction.Status.UNKNOWN&&!TransactionParser.has(t.rawBody,"\\b(?:will|would|estimated|projected|request|approve|if)\\b");
+            if(balanceStatus(t.status)||statement)for(Map.Entry<String,BigDecimal> report:t.reportedBalances.entrySet()) {
+                // A balance-only confirmation can refine a completed event without inventing its amount/direction.
+                Transaction.Status bucket=statement&&e.status==Transaction.Status.COMPLETED?Transaction.Status.COMPLETED:t.status;
+                balanceGroups.computeIfAbsent(bucket+":"+report.getKey(),k->new ArrayList<>()).add(new Balance(t,report.getKey(),report.getValue()));
+            }
         }
         if(firstCompleted!=Long.MAX_VALUE)e.occurredAt=firstCompleted;
         if(sources.stream().anyMatch(t->"MTN Data Bundle".equals(t.description)))e.title="MTN Data Bundle";

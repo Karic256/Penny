@@ -56,8 +56,8 @@ public class DeviceTest extends InstrumentationTestCase {
             });
             screenshot("01-balances");
             ScrollView scroll=(ScrollView)((ViewGroup)a.findViewById(android.R.id.content)).getChildAt(0);
-            getInstrumentation().runOnMainSync(()->scroll.scrollTo(0,650));SystemClock.sleep(200);screenshot("02-cash-flow");
-            getInstrumentation().runOnMainSync(()->scroll.fullScroll(View.FOCUS_DOWN));SystemClock.sleep(200);screenshot("03-transactions");
+            getInstrumentation().runOnMainSync(()->scroll.scrollTo(0,find(a.getWindow().getDecorView(),"Money movement").getTop()));SystemClock.sleep(300);screenshot("02-cash-flow");
+            getInstrumentation().runOnMainSync(()->scroll.scrollTo(0,scroll.getChildAt(0).getHeight()));SystemClock.sleep(300);screenshot("03-transactions");
             getInstrumentation().runOnMainSync(()->{TextView bundle=find(a.getWindow().getDecorView(),"MTN Data Bundle");assertNotNull(bundle);((View)bundle.getParent()).performClick();});
             getInstrumentation().waitForIdleSync();SystemClock.sleep(200);screenshot("04-sms-detail");
         } finally {getInstrumentation().runOnMainSync(a::finish);getInstrumentation().waitForIdleSync();}

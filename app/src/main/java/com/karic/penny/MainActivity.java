@@ -74,7 +74,7 @@ public class MainActivity extends Activity {
         label(hero,complete?"COMBINED LAST-REPORTED BALANCE":"PARTIAL LAST-REPORTED TOTAL",11,0xffc7dfcb);
         label(hero,known==0?"Balance unavailable":money(combined),30,0xffffffff,true);
         label(hero,known+" of "+ledger.accounts.size()+" account slots have a balance"+(complete?"":" • incomplete"),12,0xffd6ead9);
-        if(known>0)label(hero,"Reports: "+date(oldest)+ (newest!=oldest?" – "+date(newest):"")+" EAT",12,0xffd6ead9);
+        if(known>0)label(hero,"Reports: "+date(oldest)+ (!date(newest).equals(date(oldest))?" – "+date(newest):"")+" EAT",12,0xffd6ead9);
         label(hero,"SMS snapshots, not live balances"+(types.size()>1?" • mixed balance types":""),12,0xffd6ead9);
         if(!identifiers)label(hero,"Some account identifiers are missing; multiple wallets cannot be distinguished.",12,0xffd6ead9);
         for(Ledger.Account a:ledger.accounts.values()) {
@@ -155,7 +155,7 @@ public class MainActivity extends Activity {
     }
     private void detail(Ledger.Entry e) {
         ScrollView s=new ScrollView(this);LinearLayout box=new LinearLayout(this);box.setOrientation(1);box.setPadding(dp(18),dp(8),dp(18),dp(18));s.addView(box);
-        label(box,e.t.displayAccount()+"\nAmount: "+known(e.amount)+"\nDirection: "+(e.direction==null?"Unknown":e.direction)+"\nStatus: "+e.status+"\nCategory: "+e.category+"\nFee: "+known(e.fee)+"\nTime: "+date(e.occurredAt)+" EAT\nInternal transfer: "+e.internal,14,INK);
+        label(box,e.t.displayAccount()+"\nAmount: "+known(e.amount)+"\nDirection: "+(e.direction==null?"Unknown":e.credit()?"Incoming":"Outgoing")+"\nStatus: "+e.status+"\nCategory: "+e.category+"\nFee: "+known(e.fee)+"\nTime: "+date(e.occurredAt)+" EAT\nInternal transfer: "+(e.internal?"Yes":"No"),14,INK);
         for(String w:e.warnings)label(box,"• "+w,13,AMBER);
         button(box,"Correct category / confirm salary",()->category(e));
         if(e.internal)button(box,"Mark as external / unlink transfer",()->change(()->{try(PennyDatabase db=new PennyDatabase(this)){db.unlink(e,ledger.find(e.peer));}}));

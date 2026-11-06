@@ -25,7 +25,7 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build debug APK
-        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
 
       - name: Upload Penny APK
         uses: actions/upload-artifact@v4
@@ -33,3 +33,43 @@ jobs:
           name: Penny-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Penny-unit-tests
+          path: app/build/reports/tests/testDebugUnitTest/
+
+      - name: Verify migration and dashboard on Android
+        timeout-minutes: 10
+        run: |
+          sudo chmod 666 /dev/kvm
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "system-images;android-30;default;x86_64" "emulator" "platform-tools"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name penny --package "system-images;android-30;default;x86_64" --force
+          "$ANDROID_HOME/emulator/emulator" -avd penny -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/penny-emulator.log" 2>&1 &
+          adb wait-for-device
+          for attempt in $(seq 1 60); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then break; fi
+            sleep 3
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb shell input keyevent 82
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb shell am instrument -w com.karic.penny.test/android.test.InstrumentationTestRunner | tee "$RUNNER_TEMP/penny-device-tests.txt"
+          grep -q '^OK (' "$RUNNER_TEMP/penny-device-tests.txt"
+          adb pull /sdcard/Android/data/com.karic.penny/files/screenshots/ qa-screenshots/
+
+      - name: Upload Android screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Penny-Android-QA
+          path: |
+            qa-screenshots/
+            ${{ runner.temp }}/penny-device-tests.txt
+            ${{ runner.temp }}/penny-emulator.log

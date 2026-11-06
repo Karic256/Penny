@@ -5,8 +5,8 @@ plugins {
 android {
     namespace = "com.karic.penny"
     compileSdk = 35
-    useLibrary("android.test.runner")
-    useLibrary("android.test.base")
+    useLibrary("android.test.runner", false)
+    useLibrary("android.test.base", false)
 
     defaultConfig {
         applicationId = "com.karic.penny"

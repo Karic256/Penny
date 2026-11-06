@@ -52,6 +52,7 @@ public final class TransactionParser {
         if(!t.reportedBalances.isEmpty()){t.balanceType=t.reportedBalances.containsKey("Available")?"Available":t.reportedBalances.keySet().iterator().next();t.reportedBalance=t.reportedBalances.get(t.balanceType);}
         extractTime(t, text);
         adapter.parse(t, text);
+        if(t.status==Transaction.Status.APPROVAL)t.description="Payment approval request";
         if (t.amount != null) t.amount = t.amount.abs();
         if (t.fee != null && t.fee.signum() < 0) { t.fee = null; t.warnings.add("Negative fee needs review"); }
         t.transferHint = has(text, "\\b(?:transfer|sent|send|ebanking)\\b");
@@ -76,7 +77,7 @@ public final class TransactionParser {
             t.counterparty = payer != null ? payer.trim() : counterparty(b);
             t.description = payer != null ? payer : find("(?:description|narration|message)\\s*:\\s*(.+?)(?=\\s+(?:new |available )?bal(?:ance)?\\b|$)", b);
             t.category = t.isCredit() ? "Income (unconfirmed)" : category(b);
-            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : has(b,"funds transfer") ? "Funds Transfer / Ebanking" : t.direction==null ? "Bank balance report" : "Bank " + (t.isCredit() ? "credit" : "debit");
+            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : has(b,"funds transfer") ? "Funds Transfer / Ebanking" : t.direction==null ? (t.reportedBalance==null?"Bank SMS record":"Bank balance report") : "Bank " + (t.isCredit() ? "credit" : "debit");
             if (payer != null) t.warnings.add("Incoming EFT payer retained; salary not confirmed");
         }
     }
@@ -90,7 +91,7 @@ public final class TransactionParser {
             t.description = find("message\\s*:\\s*(.+?)(?=\\s*(?:[.;]\\s*)?(?:new balance|available balance|balance|transaction id|txn id)\\b|$)", b);
             t.category = t.isCredit() ? "Income (unconfirmed)" : category(b);
             if (has(b,"bundle purchase|data bundle|airtime")) { t.description = has(b,"bundle") ? "MTN Data Bundle" : "MTN Airtime"; t.category = "Airtime & Data"; }
-            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : t.direction==null ? "Mobile money balance report" : "Mobile money " + (t.isCredit() ? "credit" : "payment");
+            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : t.direction==null ? (t.reportedBalance==null?"Mobile money SMS record":"Mobile money balance report") : "Mobile money " + (t.isCredit() ? "credit" : "payment");
         }
     }
     private static BigDecimal actionAmount(String b) {

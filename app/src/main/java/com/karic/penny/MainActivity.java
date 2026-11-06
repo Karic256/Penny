@@ -163,6 +163,7 @@ public class MainActivity extends Activity {
         for(Transaction t:e.sources) {
             label(box,"ORIGINAL SMS • "+t.sender+"\nReceived "+date(t.receivedAt)+" EAT\n"+t.rawBody,14,INK);
             label(box,"Parsed account: "+t.account+"\nProvider: "+t.provider+"\nTransaction ID: "+unknown(t.transactionId)+"\nOriginal ID: "+unknown(t.originalId)+"\nCounterparty: "+unknown(t.counterparty)+"\nDescription: "+unknown(t.description)+"\nAmount: "+known(t.amount)+"\nDirection: "+unknown(t.direction)+"\nFee: "+known(t.fee)+"\n"+t.balanceType+" balance: "+known(t.reportedBalance)+"\nStatus: "+t.status+"\n"+t.timeSource+": "+date(t.timestamp)+" EAT",12,MUTED);
+            for(Map.Entry<String,BigDecimal> report:t.reportedBalances.entrySet())label(box,"Explicit "+report.getKey()+" balance: "+money(report.getValue()),12,MUTED);
         }
         new AlertDialog.Builder(this).setTitle(e.title).setView(s).setPositiveButton("Close",null).show();
     }
@@ -214,18 +215,20 @@ public class MainActivity extends Activity {
         worker.execute(()->{
             try(OutputStream out=getContentResolver().openOutputStream(uri)) {
                 if(out==null)throw new IllegalStateException();
-                StringBuilder csv=new StringBuilder("date_EAT,provider,account,description,direction,status,amount_UGX,fee_UGX,category,internal_transfer,transaction_id,confirmations,review_notes\n");
-                for(Ledger.Entry e:data.entries)csv.append(csv(date(e.occurredAt))).append(',').append(csv(e.t.provider)).append(',').append(csv(Transaction.mask(e.t.account))).append(',').append(csv(e.title)).append(',').append(csv(e.direction)).append(',').append(e.status).append(',').append(e.amount==null?"":e.amount.toPlainString()).append(',').append(e.fee==null?"":e.fee.toPlainString()).append(',').append(csv(e.category)).append(',').append(e.internal).append(',').append(csv(e.t.transactionId)).append(',').append(e.sources.size()).append(',').append(csv(String.join("; ",e.warnings))).append('\n');
+                StringBuilder csv=new StringBuilder("date_EAT,provider,account,description,direction,status,amount_UGX,fee_UGX,category,internal_transfer,transaction_id,confirmations,reported_balances,review_notes\n");
+                for(Ledger.Entry e:data.entries)csv.append(csv(date(e.occurredAt))).append(',').append(csv(e.t.provider)).append(',').append(csv(Transaction.mask(e.t.account))).append(',').append(csv(e.title)).append(',').append(csv(e.direction)).append(',').append(e.status).append(',').append(e.amount==null?"":e.amount.toPlainString()).append(',').append(e.fee==null?"":e.fee.toPlainString()).append(',').append(csv(e.category)).append(',').append(e.internal).append(',').append(csv(e.t.transactionId)).append(',').append(e.sources.size()).append(',').append(csv(reportSummary(e))).append(',').append(csv(String.join("; ",e.warnings))).append('\n');
                 out.write(csv.toString().getBytes(StandardCharsets.UTF_8));runOnUiThread(()->Toast.makeText(this,"SMS ledger exported",Toast.LENGTH_SHORT).show());
             }catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Export failed",Toast.LENGTH_LONG).show());}
         });
     }
     private String csv(String s){if(s==null)s="";if(s.matches("^[=+@\\-\\t\\r].*"))s="'"+s;return "\""+s.replace("\"","\"\"")+"\"";}
+    private String reportSummary(Ledger.Entry e){List<String> values=new ArrayList<>();for(Ledger.Balance b:e.reports)values.add(b.type+" "+b.value.toPlainString()+" at "+date(b.at)+" EAT");return String.join("; ",values);}
     private void pickDates() {
-        Calendar c=Calendar.getInstance(zone);new DatePickerDialog(this,(v,y,m,d)->{
+        Calendar c=Calendar.getInstance(zone);DatePickerDialog firstPicker=new DatePickerDialog(this,(v,y,m,d)->{
             Calendar first=Calendar.getInstance(zone);first.clear();first.set(y,m,d);
-            new DatePickerDialog(this,(v2,y2,m2,d2)->{Calendar last=Calendar.getInstance(zone);last.clear();last.set(y2,m2,d2);last.add(Calendar.DAY_OF_MONTH,1);if(last.getTimeInMillis()<=first.getTimeInMillis()){Toast.makeText(this,"End date must follow start date",Toast.LENGTH_LONG).show();render();return;}customStart=first.getTimeInMillis();customEnd=last.getTimeInMillis();period="Custom Dates";limit=40;render();},y,m,d).show();
-        },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();
+            DatePickerDialog lastPicker=new DatePickerDialog(this,(v2,y2,m2,d2)->{Calendar last=Calendar.getInstance(zone);last.clear();last.set(y2,m2,d2);last.add(Calendar.DAY_OF_MONTH,1);if(last.getTimeInMillis()<=first.getTimeInMillis()){Toast.makeText(this,"End date must follow start date",Toast.LENGTH_LONG).show();render();return;}customStart=first.getTimeInMillis();customEnd=last.getTimeInMillis();period="Custom Dates";limit=40;render();},y,m,d);
+            lastPicker.setTitle("End date (inclusive)");lastPicker.setOnCancelListener(ignored->render());lastPicker.show();
+        },c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH));firstPicker.setTitle("Start date");firstPicker.setOnCancelListener(ignored->render());firstPicker.show();
     }
     private long[] window() {
         if(period.equals("Custom Dates")&&customEnd>customStart)return new long[]{customStart,customEnd};

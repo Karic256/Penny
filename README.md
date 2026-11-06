@@ -20,9 +20,9 @@ Centenary signed `trxn of` amounts, masked A/C, dates/times, EFT payer text and 
 
 States: completed, pending, failed, reversed, approval, unknown. Explicit original IDs link settlement/reversal events in the same provider/account. Unlinked events remain visible for review. A pending card's available balance is shown without counting it as spending. A settlement with the same ID counts once.
 
-Deduplication uses provider + account + transaction ID. Without an ID, only the same sender, original SMS received timestamp and normalized body is idempotent. Separate no-ID messages remain, with potential duplicates flagged, so repeated purchases are not silently removed. Conflicting amounts/directions/fees are excluded for review. Consistent integer/decimal duplicate balance reports retain the more precise value; conflicting reports are flagged and not used as reliable balances.
+Deduplication uses provider + account + transaction ID. Missing account identifiers can be reconciled through a unique matching provider/ID with a known account. Without an ID, sender + SMS source timestamp + normalized body is idempotent. Receiver and inbox import share the service-center timestamp (`DATE_SENT`); arrival time is retained separately. Separate no-ID messages remain, with potential duplicates flagged, so repeated purchases are not silently removed. Conflicting amounts/directions/fees are excluded for review. Consistent integer/decimal duplicate balances retain the more precise value; conflicting reports are not used as reliable balances. Both available and ledger balances in one SMS are preserved.
 
-Limitations: identical same-second no-ID SMS cannot be distinguished by the fields currently read. Wallets without identifiers cannot be separated; the grouping and total are labelled incomplete. Reused IDs in one account may need review.
+Limitations: identical same-second no-ID SMS cannot be distinguished by the fields currently read. If the SMS provider omits `DATE_SENT`, inbox imports fall back to arrival time; a receiver/inbox no-ID pair may remain separate and flagged. Wallets without identifiers cannot be separated; the grouping and total are labelled incomplete. Reused IDs in one account may need review.
 
 ## Transfers and corrections
 

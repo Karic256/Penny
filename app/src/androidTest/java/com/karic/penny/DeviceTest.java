@@ -72,9 +72,23 @@ public class DeviceTest extends InstrumentationTestCase {
         }
     }
     private TextView find(View v,String exact){if(v instanceof TextView&&exact.contentEquals(((TextView)v).getText()))return (TextView)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){TextView t=find(((ViewGroup)v).getChildAt(i),exact);if(t!=null)return t;}return null;}
+    public void testTransferPairPersistsAndCanBeUnlinked() {
+        long at=System.currentTimeMillis();String key;
+        try(PennyDatabase db=new PennyDatabase(context)) {
+            db.insertSms("Centenary","a trxn of -10000 on your A/C **123. Funds Transfer. Fee UGX 50. Ref: TESTBANK01",at);
+            db.insertSms("MTN","MTN received UGX 10000 from Bank. Fee UGX 0. Ref: TESTMOMO01",at);
+            Ledger l=db.ledger();db.link(l.entries.get(0),l.entries.get(1));key=l.entries.get(0).key;
+        }
+        try(PennyDatabase db=new PennyDatabase(context)) {
+            Ledger l=db.ledger();assertTrue(l.entries.get(0).internal);assertTrue(l.entries.get(1).internal);
+            assertEquals(0,new java.math.BigDecimal("50").compareTo(l.totals(0,Long.MAX_VALUE,"All Accounts").spending));
+            assertEquals(0,l.totals(0,Long.MAX_VALUE,"All Accounts").income.signum());
+            Ledger.Entry e=l.find(key);db.unlink(e,l.find(e.peer));assertFalse(db.ledger().find(key).internal);
+        }
+    }
     private void screenshot(String name) throws Exception {
         Bitmap bitmap=getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(bitmap);
-        File directory=new File(context.getExternalFilesDir(null),"screenshots");assertTrue(directory.isDirectory()||directory.mkdirs());
+        File directory=new File(context.getFilesDir(),"screenshots");assertTrue(directory.isDirectory()||directory.mkdirs());
         try(FileOutputStream out=new FileOutputStream(new File(directory,name+".png"))){assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,out));}finally{bitmap.recycle();}
     }
 }

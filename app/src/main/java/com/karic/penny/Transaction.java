@@ -3,6 +3,8 @@ package com.karic.penny;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 /** An SMS observation. Null money fields mean unknown, never zero. */
 public class Transaction {
@@ -11,6 +13,7 @@ public class Transaction {
     public String direction, counterparty, description, category, transactionId, originalId;
     public String balanceType = "Reported", timeSource = "SMS received time";
     public BigDecimal amount, fee, reportedBalance;
+    public final Map<String,BigDecimal> reportedBalances = new LinkedHashMap<>();
     public long timestamp, receivedAt;
     public boolean transferHint, feeRefunded;
     public Status status = Status.UNKNOWN;

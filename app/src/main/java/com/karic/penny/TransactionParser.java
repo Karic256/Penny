@@ -39,11 +39,17 @@ public final class TransactionParser {
         t.fee = number("(?:fee|charges?|transaction cost)(?:\\s+of|\\s+is)?\\s*[:=]?\\s*(?:" + CCY + ")?" + NUM, text);
         t.feeRefunded = has(text, "fees? (?:also )?(?:refunded|reversed)");
         Matcher bm = pattern("((?:new|available|ledger|current|closing)\\s+balance|balance|bal\\.?)\\s*(?:is)?\\s*[:=]?\\s*(?:" + CCY + ")?" + NUM).matcher(text);
-        if (bm.find()) {
-            t.reportedBalance = decimal(bm.group(2));
+        Set<String> conflictingTypes=new HashSet<>();
+        while (bm.find()) {
+            BigDecimal value=decimal(bm.group(2));
             String label = bm.group(1).toLowerCase(Locale.ROOT);
-            t.balanceType = label.contains("available") ? "Available" : label.contains("ledger") ? "Ledger" : "Reported";
+            String type = label.contains("available") ? "Available" : label.contains("ledger") ? "Ledger" : "Reported";
+            if(value==null||conflictingTypes.contains(type))continue;
+            BigDecimal prior=t.reportedBalances.get(type);
+            if(prior!=null&&prior.compareTo(value)!=0){t.reportedBalances.remove(type);conflictingTypes.add(type);t.warnings.add("Conflicting "+type+" balances in one SMS");}
+            else t.reportedBalances.put(type,value);
         }
+        if(!t.reportedBalances.isEmpty()){t.balanceType=t.reportedBalances.containsKey("Available")?"Available":t.reportedBalances.keySet().iterator().next();t.reportedBalance=t.reportedBalances.get(t.balanceType);}
         extractTime(t, text);
         adapter.parse(t, text);
         if (t.amount != null) t.amount = t.amount.abs();
@@ -99,7 +105,8 @@ public final class TransactionParser {
     }
     private static Transaction.Status status(String b) {
         if (has(b,"my approvals|to allow payment|approve (?:this |the )?(?:payment|transaction)|payment request")) return Transaction.Status.APPROVAL;
-        if (has(b,"\\b(?:failed|declined|unsuccessful|cancelled|canceled)\\b")) return Transaction.Status.FAILED;
+        if (has(b,"not yet (?:settled|completed)")) return Transaction.Status.PENDING;
+        if (has(b,"\\b(?:failed|declined|unsuccessful|cancelled|canceled|insufficient funds|could not)\\b|(?:not|has not been|was not) (?:completed|successful|deducted|debited|credited|sent|paid)")) return Transaction.Status.FAILED;
         if (has(b,"\\b(?:reversed|refunded|reversal successful|reversal completed)\\b")) return Transaction.Status.REVERSED;
         if (has(b,"pending settlement|\\bpending\\b|awaiting settlement|authori[sz]ation hold")) return Transaction.Status.PENDING;
         if (has(b,"\\b(?:trxn of|deducted|debited|credited|paid|sent|received|withdrawn|deposited|successful|completed|settled)\\b")) return Transaction.Status.COMPLETED;

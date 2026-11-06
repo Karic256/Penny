@@ -70,7 +70,11 @@ jobs:
           adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           adb shell am instrument -w com.karic.penny.test/android.test.InstrumentationTestRunner | tee "$RUNNER_TEMP/penny-device-tests.txt"
           grep -q '^OK (' "$RUNNER_TEMP/penny-device-tests.txt"
-          adb pull /sdcard/Android/data/com.karic.penny/files/screenshots/ qa-screenshots/
+          mkdir -p qa-screenshots
+          for name in 01-balances 02-cash-flow 03-transactions 04-sms-detail; do
+            adb exec-out run-as com.karic.penny cat "files/screenshots/$name.png" > "qa-screenshots/$name.png"
+            test -s "qa-screenshots/$name.png"
+          done
 
       - name: Upload Android screenshots
         if: always()

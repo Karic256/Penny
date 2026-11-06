@@ -31,6 +31,7 @@ public final class Ledger {
         public long at;
         public String type, timeSource, sourceKey;
         Balance(Transaction t) { value=t.reportedBalance; at=t.timestamp; type=t.balanceType; timeSource=t.timeSource; sourceKey=t.sourceKey; }
+        Balance(Transaction t,String type,BigDecimal value) {this(t);this.type=type;this.value=value;}
     }
     public static final class Account {
         public String key, label, kind;
@@ -119,7 +120,7 @@ public final class Ledger {
         for(Transaction source:sources)if(!"unknown".equals(source.account)){e.t=source;break;}
         e.status=Transaction.Status.UNKNOWN;
         boolean completed=false,failed=false; long firstCompleted=Long.MAX_VALUE;
-        Map<String,List<Transaction>> balanceGroups=new TreeMap<>();
+        Map<String,List<Balance>> balanceGroups=new TreeMap<>();
         for(Transaction t:sources) {
             e.warnings.addAll(t.warnings); e.feeRefunded|=t.feeRefunded;
             if(t.status==Transaction.Status.COMPLETED) { completed=true; firstCompleted=Math.min(firstCompleted,t.timestamp); }
@@ -140,7 +141,7 @@ public final class Ledger {
             if(t.description!=null && (e.title==null||t.description.length()>e.title.length()))e.title=t.description;
             if("MTN Data Bundle".equals(t.description))e.title=t.description;
             if("Airtime & Data".equals(t.category))e.category=t.category;
-            if(t.reportedBalance!=null&&balanceStatus(t.status))balanceGroups.computeIfAbsent(t.status+":"+t.balanceType,k->new ArrayList<>()).add(t);
+            if(balanceStatus(t.status))for(Map.Entry<String,BigDecimal> report:t.reportedBalances.entrySet())balanceGroups.computeIfAbsent(t.status+":"+report.getKey(),k->new ArrayList<>()).add(new Balance(t,report.getKey(),report.getValue()));
         }
         if(firstCompleted!=Long.MAX_VALUE)e.occurredAt=firstCompleted;
         if(sources.stream().anyMatch(t->"MTN Data Bundle".equals(t.description)))e.title="MTN Data Bundle";
@@ -148,16 +149,16 @@ public final class Ledger {
         if(e.status==Transaction.Status.REVERSED&&sources.size()==1&&e.t.originalId!=null)e.warnings.add("Reversal original not found; history incomplete");
         if(e.title==null||e.title.trim().isEmpty())e.title=e.t.provider+" SMS record";
         if(e.sources.size()>1)e.warnings.add(e.sources.size()+" confirmations reconciled into one record");
-        for(List<Transaction> reports:balanceGroups.values()) {
-            Transaction selected=reports.get(0); boolean conflict=false;
+        for(List<Balance> reports:balanceGroups.values()) {
+            Balance selected=reports.get(0); boolean conflict=false;
             for(int i=1;i<reports.size();i++) {
-                Transaction n=reports.get(i);
-                if(compatibleBalance(selected.reportedBalance,n.reportedBalance)) {
-                    if(n.reportedBalance.scale()>selected.reportedBalance.scale() || (n.reportedBalance.scale()==selected.reportedBalance.scale()&&n.timestamp>selected.timestamp))selected=n;
+                Balance n=reports.get(i);
+                if(compatibleBalance(selected.value,n.value)) {
+                    if(n.value.scale()>selected.value.scale() || (n.value.scale()==selected.value.scale()&&n.at>selected.at))selected=n;
                 } else { conflict=true; }
             }
             if(conflict) {e.warnings.add("Conflicting reported balances for this event; balance unavailable");}
-            else if(!e.conflict)e.reports.add(new Balance(selected));
+            else if(!e.conflict)e.reports.add(selected);
         }
         return e;
     }

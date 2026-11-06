@@ -76,7 +76,7 @@ public final class TransactionParser {
             t.counterparty = payer != null ? payer.trim() : counterparty(b);
             t.description = payer != null ? payer : find("(?:description|narration|message)\\s*:\\s*(.+?)(?=\\s+(?:new |available )?bal(?:ance)?\\b|$)", b);
             t.category = t.isCredit() ? "Income (unconfirmed)" : category(b);
-            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : has(b,"funds transfer") ? "Funds Transfer / Ebanking" : "Bank " + (t.isCredit() ? "credit" : "debit");
+            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : has(b,"funds transfer") ? "Funds Transfer / Ebanking" : t.direction==null ? "Bank balance report" : "Bank " + (t.isCredit() ? "credit" : "debit");
             if (payer != null) t.warnings.add("Incoming EFT payer retained; salary not confirmed");
         }
     }
@@ -90,7 +90,7 @@ public final class TransactionParser {
             t.description = find("message\\s*:\\s*(.+?)(?=\\s*(?:[.;]\\s*)?(?:new balance|available balance|balance|transaction id|txn id)\\b|$)", b);
             t.category = t.isCredit() ? "Income (unconfirmed)" : category(b);
             if (has(b,"bundle purchase|data bundle|airtime")) { t.description = has(b,"bundle") ? "MTN Data Bundle" : "MTN Airtime"; t.category = "Airtime & Data"; }
-            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : "Mobile money " + (t.isCredit() ? "credit" : "payment");
+            if (t.description == null) t.description = t.counterparty != null ? t.counterparty : t.direction==null ? "Mobile money balance report" : "Mobile money " + (t.isCredit() ? "credit" : "payment");
         }
     }
     private static BigDecimal actionAmount(String b) {

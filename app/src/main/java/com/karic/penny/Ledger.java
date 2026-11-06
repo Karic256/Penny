@@ -37,6 +37,7 @@ public final class Ledger {
         public boolean identifierKnown;
         public Balance latest;
         public final Map<String,Balance> byType = new TreeMap<>();
+        final Set<String> ambiguous = new HashSet<>();
         public final Set<String> warnings = new LinkedHashSet<>();
     }
     public static final class Totals {
@@ -51,20 +52,36 @@ public final class Ledger {
     public Ledger(Collection<Transaction> observations, Map<String,Edit> edits) {
         List<Transaction> sorted = new ArrayList<>(observations);
         sorted.sort(Comparator.comparingLong((Transaction t)->t.timestamp).thenComparing(t->t.sourceKey));
+        Map<String,Set<String>> knownScopes=new HashMap<>();
+        for(Transaction t:sorted)if(!"unknown".equals(t.account)&&t.transactionId!=null)
+            knownScopes.computeIfAbsent(t.provider+":"+t.transactionId.toUpperCase(Locale.ROOT),k->new HashSet<>()).add(t.accountKey());
+        Map<String,String> scopes=new HashMap<>();
+        for(Transaction t:sorted) {
+            String scope=t.accountKey();String ref=t.originalId!=null?t.originalId:t.transactionId;
+            Set<String> candidates=ref==null?null:knownScopes.get(t.provider+":"+ref.toUpperCase(Locale.ROOT));
+            if("unknown".equals(t.account)&&candidates!=null&&candidates.size()==1)scope=candidates.iterator().next();
+            scopes.put(t.sourceKey,scope);
+        }
         Map<String,Transaction> identities = new HashMap<>();
-        for(Transaction t:sorted) if(t.transactionId!=null) identities.put(id(t,t.transactionId),t);
+        for(Transaction t:sorted) if(t.transactionId!=null) identities.put(scopes.get(t.sourceKey)+":id:"+t.transactionId.toUpperCase(Locale.ROOT),t);
         Map<String,List<Transaction>> groups = new TreeMap<>();
         Set<String> seen = new HashSet<>();
         for(Transaction t:sorted) {
             if(!seen.add(t.sourceKey))continue;
-            String key = key(t);
-            if(t.originalId!=null && identities.containsKey(id(t,t.originalId))
-                    && (t.status==Transaction.Status.REVERSED || t.status==Transaction.Status.COMPLETED)) key=id(t,t.originalId);
+            String scope=scopes.get(t.sourceKey);
+            String key=t.transactionId==null?scope+":sms:"+t.sourceKey:scope+":id:"+t.transactionId.toUpperCase(Locale.ROOT);
+            Transaction target=t;Set<String> visited=new HashSet<>();
+            while(target.originalId!=null&&(target.status==Transaction.Status.REVERSED||target.status==Transaction.Status.COMPLETED)) {
+                String parent=scope+":id:"+target.originalId.toUpperCase(Locale.ROOT);
+                if(!visited.add(parent)||!identities.containsKey(parent))break;
+                key=parent;target=identities.get(parent);
+            }
             groups.computeIfAbsent(key,k->new ArrayList<>()).add(t);
         }
         for(Map.Entry<String,List<Transaction>> group:groups.entrySet()) entries.add(reconcile(group.getKey(),group.getValue()));
         for(Entry e:entries) {
             Edit edit=edits.get(e.key);
+            if(edit==null)for(Transaction source:e.sources){edit=edits.get(key(source));if(edit!=null)break;}
             if(edit!=null) { if(edit.category!=null&&!edit.category.isEmpty())e.category=edit.category; e.internal=edit.internal; e.peer=edit.transferPeer; }
         }
         // Only a shared, explicit reference plus matching opposite legs establishes an automatic transfer.
@@ -73,7 +90,13 @@ public final class Ledger {
             for(Entry in:entries) if(in.counted()&&in.credit()&&!in.internal&&!in.accountKey().equals(out.accountKey())
                     && out.amount.compareTo(in.amount)==0 && out.t.transactionId.equalsIgnoreCase(in.t.transactionId==null?"":in.t.transactionId)
                     && Math.abs(out.occurredAt-in.occurredAt)<=1800000L && !edits.containsKey(out.key)&&!edits.containsKey(in.key)) matches.add(in);
-            if(matches.size()==1) { Entry in=matches.get(0); out.internal=in.internal=true; out.peer=in.key; in.peer=out.key; }
+            if(matches.size()==1) {
+                Entry in=matches.get(0);int competing=0;
+                for(Entry candidate:entries)if(candidate.counted()&&!candidate.credit()&&!candidate.internal&&candidate.t.transferHint&&candidate.t.transactionId!=null
+                        &&candidate.t.transactionId.equalsIgnoreCase(in.t.transactionId)&&!candidate.accountKey().equals(in.accountKey())
+                        &&candidate.amount.compareTo(in.amount)==0&&Math.abs(candidate.occurredAt-in.occurredAt)<=1800000L)competing++;
+                if(competing==1){out.internal=in.internal=true;out.peer=in.key;in.peer=out.key;}
+            }
         }
         for(Entry e:entries) if(e.internal) {
             Entry peer=find(e.peer);
@@ -93,6 +116,7 @@ public final class Ledger {
     private Entry reconcile(String key,List<Transaction> sources) {
         Entry e=new Entry(); e.key=key; e.sources.addAll(sources);
         e.t=sources.get(0); e.occurredAt=e.t.timestamp; e.title=e.t.description; e.category=e.t.category;
+        for(Transaction source:sources)if(!"unknown".equals(source.account)){e.t=source;break;}
         e.status=Transaction.Status.UNKNOWN;
         boolean completed=false,failed=false; long firstCompleted=Long.MAX_VALUE;
         Map<String,List<Transaction>> balanceGroups=new TreeMap<>();
@@ -114,10 +138,12 @@ public final class Ledger {
                 else e.fee=t.fee;
             }
             if(t.description!=null && (e.title==null||t.description.length()>e.title.length()))e.title=t.description;
+            if("MTN Data Bundle".equals(t.description))e.title=t.description;
             if("Airtime & Data".equals(t.category))e.category=t.category;
             if(t.reportedBalance!=null&&balanceStatus(t.status))balanceGroups.computeIfAbsent(t.status+":"+t.balanceType,k->new ArrayList<>()).add(t);
         }
         if(firstCompleted!=Long.MAX_VALUE)e.occurredAt=firstCompleted;
+        if(sources.stream().anyMatch(t->"MTN Data Bundle".equals(t.description)))e.title="MTN Data Bundle";
         if(completed&&failed) {e.conflict=true;e.warnings.add("Both failed and completed confirmations; excluded until verified");}
         if(e.status==Transaction.Status.REVERSED&&sources.size()==1&&e.t.originalId!=null)e.warnings.add("Reversal original not found; history incomplete");
         if(e.title==null||e.title.trim().isEmpty())e.title=e.t.provider+" SMS record";
@@ -150,7 +176,7 @@ public final class Ledger {
             for(Balance b:e.reports) {
                 Balance prev=a.byType.get(b.type);
                 if(prev==null||b.at>prev.at)a.byType.put(b.type,b);
-                else if(b.at==prev.at&&b.value.compareTo(prev.value)!=0) { a.warnings.add("Different balances at the same time; latest balance ambiguous"); }
+                else if(b.at==prev.at&&b.value.compareTo(prev.value)!=0) { a.ambiguous.add(b.type+":"+b.at);a.warnings.add("Different balances at the same time; review source SMS"); }
             }
             for(String w:e.warnings)if(w.startsWith("Conflicting reported"))a.warnings.add(w);
         }
@@ -158,8 +184,9 @@ public final class Ledger {
         if(accounts.values().stream().noneMatch(a->"Bank".equals(a.kind)))placeholder("Centenary Bank:unknown","Centenary Bank • account unknown","Bank");
         if(accounts.values().stream().noneMatch(a->"Mobile Money".equals(a.kind)))placeholder("MTN:unknown","MTN Mobile Money • number unknown","Mobile Money");
         for(Account a:accounts.values()) {
+            a.byType.entrySet().removeIf(pair->a.ambiguous.contains(pair.getValue().type+":"+pair.getValue().at));
             for(Balance b:a.byType.values())if(a.latest==null||b.at>a.latest.at || (b.at==a.latest.at&&"Available".equals(b.type)))a.latest=b;
-            if(a.warnings.stream().anyMatch(w->w.contains("same time")))a.latest=null;
+            if(a.latest!=null&&a.ambiguous.contains(a.latest.type+":"+a.latest.at))a.latest=null;
             List<Entry> rows=new ArrayList<>();for(Entry e:entries)if(e.accountKey().equals(a.key))rows.add(e);
             rows.sort(Comparator.comparingLong(e->e.occurredAt));
             Balance prior=null;
@@ -180,7 +207,8 @@ public final class Ledger {
     private void placeholder(String key,String label,String kind) { Account a=new Account();a.key=key;a.label=label;a.kind=kind;accounts.put(key,a); }
     private void flagPotentialDuplicates() {
         Map<String,Entry> previous=new HashMap<>();
-        for(Entry e:entries)if(e.amount!=null) {
+        List<Entry> chronological=new ArrayList<>(entries);chronological.sort(Comparator.comparingLong(e->e.occurredAt));
+        for(Entry e:chronological)if(e.amount!=null) {
             String signature=e.accountKey()+"|"+e.direction+"|"+e.amount.stripTrailingZeros()+"|"+e.title;
             Entry old=previous.put(signature,e);
             if(old!=null&&Math.abs(e.occurredAt-old.occurredAt)<120000L&&(e.t.transactionId==null||old.t.transactionId==null)) {

@@ -44,6 +44,7 @@ jobs:
       - name: Verify migration and dashboard on Android
         timeout-minutes: 10
         run: |
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
           sudo chmod 666 /dev/kvm
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "system-images;android-30;default;x86_64" "emulator" "platform-tools"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name penny --package "system-images;android-30;default;x86_64" --force

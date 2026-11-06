@@ -20,6 +20,8 @@ public class SmsReceiver extends BroadcastReceiver {
         new Thread(() -> {
             try (PennyDatabase db = new PennyDatabase(context)) {
                 db.insertSms(origin, body.toString(), receivedAt);
+            } catch (RuntimeException ignored) {
+                // The inbox scan can recover this SMS; never log a private message body.
             } finally { pending.finish(); }
         }, "penny-sms").start();
     }

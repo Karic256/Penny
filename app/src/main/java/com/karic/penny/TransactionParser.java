@@ -23,6 +23,7 @@ public final class TransactionParser {
         if (body == null || body.trim().isEmpty()) return null;
         String text = body.replace('\u00a0', ' ').replace('\u2212', '-').replaceAll("[\\t\\r\\n]+", " ").replaceAll("([+-])\\s+(?=\\d)", "$1");
         if (has(text, "\\b(?:OTP|one[ -]time password|verification code|PIN is)\\b")) return null;
+        if (has(text, "\\b(?:enjoy\\s+\\d+%|\\d+%\\s+off|terms and conditions apply|t&cs apply|order via|limited.time offer)\\b")) return null;
         Adapter adapter = null;
         for (Adapter a : ADAPTERS) if (a.accepts(sender == null ? "" : sender, text)) { adapter = a; break; }
         if (adapter == null) return null;
@@ -65,10 +66,10 @@ public final class TransactionParser {
         return t;
     }
     private static class Centenary implements Adapter {
-        public boolean accepts(String s, String b) { return has(s,"centenary|centebank|centemobile") || has(b,"\\bcentenary\\b"); }
+        public boolean accepts(String s, String b) { return senderIs(s,"centenary","centenarybank","centebank","centemobile"); }
         public void parse(Transaction t, String b) {
             t.provider = "Centenary Bank"; t.accountKind = "Bank";
-            String a = find("(?:A/C|acc(?:ount)?(?:\\s*(?:no\\.?|number))?)\\s*[:#]?\\s*([*Xx•]*[0-9][*Xx•0-9-]{1,})", b);
+            String a = find("\\b(?:A/C|acc(?:ount)?(?:\\s*(?:no\\.?|number))?)\\s*[:#]?\\s*([*Xx•]*[0-9][*Xx•0-9-]{2,})(?![0-9/-])", b);
             if (a != null) t.account = a.replaceAll("[*Xx•]+", "*").replace("-", "");
             String signed = find("(?:trxn|transaction)\\s+of\\s*(?:" + CCY + ")?" + NUM, b);
             if (signed != null) { t.amount = decimal(signed); t.direction = signed.trim().startsWith("-") ? "OUT" : "IN"; }
@@ -82,7 +83,7 @@ public final class TransactionParser {
         }
     }
     private static class Mtn implements Adapter {
-        public boolean accepts(String s, String b) { return has(s,"\\bmtn\\b|mtnmomo|mobilemoney") || has(b,"\\bMTN\\b|MoMo|mobile money"); }
+        public boolean accepts(String s, String b) { return senderIs(s,"mtn","mtnmobmoney","mtnmomo","mtnmobilemoney"); }
         public void parse(Transaction t, String b) {
             t.provider = "MTN"; t.accountKind = "Mobile Money";
             String a = find("(?:your (?:mobile money |momo )?(?:account|wallet)|A/C)\\s*[:#]?\\s*([*Xx•]*[0-9][*Xx•0-9]{2,})", b);
@@ -90,9 +91,14 @@ public final class TransactionParser {
             t.amount = actionAmount(b); t.direction = direction(b); t.counterparty = counterparty(b);
             t.description = find("message\\s*:\\s*(.+?)(?=\\s*(?:[.;]\\s*)?(?:new balance|available balance|balance|transaction id|txn id)\\b|$)", b);
             t.category = t.isCredit() ? "Income (unconfirmed)" : category(b);
-            if (has(b,"bundle purchase|data bundle|airtime")) { t.description = has(b,"bundle") ? "MTN Data Bundle" : "MTN Airtime"; t.category = "Airtime & Data"; }
+            if (has(b,"bundle purchase|data bundle|cisdatabun|airtime")) { t.description = has(b,"bundle|cisdatabun") ? "MTN Data Bundle" : "MTN Airtime"; t.category = "Airtime & Data"; }
+            else if (has(b,"\\bmokash\\b") && "OUT".equals(t.direction)) t.description = "MoKash deduction";
             if (t.description == null) t.description = t.counterparty != null ? t.counterparty : t.direction==null ? (t.reportedBalance==null?"Mobile money SMS record":"Mobile money balance report") : "Mobile money " + (t.isCredit() ? "credit" : "payment");
         }
+    }
+    private static boolean senderIs(String sender, String... allowed) {
+        String normalized = sender.toLowerCase(Locale.ROOT).replaceAll("[\\s_-]+", "");
+        return Arrays.asList(allowed).contains(normalized);
     }
     private static BigDecimal actionAmount(String b) {
         BigDecimal n = number("(?:deducted|debited|credited|paid|sent|received|withdrawn|deposited|purchase(?:d)?(?:\\s+of)?|payment(?:\\s+of)?|amount|transferred|reversed|refunded)\\s*(?:of|with|is)?\\s*[:=]?\\s*" + CCY + NUM, b);

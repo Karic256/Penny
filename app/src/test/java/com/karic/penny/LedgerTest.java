@@ -8,6 +8,23 @@ import static org.junit.Assert.*;
 
 /** Synthetic transaction IDs and account suffixes retain the supplied formats, not personal SMS. */
 public class LedgerTest {
+    @Test public void verifiedThreadsIgnoreAdsAndUseLatestWalletBalance() {
+        String bank = "CENTENARY: Dear customer, a trxn of -10,000 on your A/C **123 on 06-11-2026 at 09:52. Bal:50,621 (Funds Transfer (Mobile) / Ebanking).";
+        assertNull(TransactionParser.parse("OtherSender",bank,NOW));
+        assertNull(TransactionParser.parse("Centenary Bank","Pay with your card & enjoy 20% off purchases of UGX 50,000. Order via Glovo. T&Cs apply",NOW));
+        Transaction debit = sms("Centenary Bank",bank,NOW);
+        assertEquals("*123",debit.account);
+        Transaction precise = sms("MTNMobMoney","MTN UGANDA LIMITED CISDATABUN has deducted UGX UGX 3,000 at a fee of UGX UGX 0 Transaction ID: TEST4490001 from your mobile money account. New balance is:UGX UGX 663.36.",NOW);
+        Transaction rounded = sms("MTNMobMoney","MTN UGANDA LIMITED CISDATABUN has deducted UGX 3000 at a fee of UGX 0 Transaction ID: TEST4490001 from your mobile money account. Message: Bundle Purchase. New balance is:UGX 663.",NOW+1000);
+        Ledger first=ledger(debit,precise,rounded);
+        money("663.36",first.accounts.get("MTN:unknown").latest.value);
+        money("13000",all(first).spending);
+        Transaction mokash = sms("MTNMobMoney","MoKash . has deducted UGX 500 at a fee of UGX 0 Transaction ID: TEST4490002 from your mobile money account. Message: Debit customer 256700000000. New balance is:UGX 163. Your Bonus was: 0.",NOW+2000);
+        Ledger latest=ledger(mokash,rounded,debit,precise);
+        assertEquals("unknown",mokash.account);
+        money("163",latest.accounts.get("MTN:unknown").latest.value);
+        money("13500",all(latest).spending);
+    }
     static final long NOW=Instant.parse("2026-11-07T09:00:00Z").toEpochMilli();
     static Transaction sms(String sender,String body,long at){Transaction t=TransactionParser.parse(sender,body,at);assertNotNull(body,t);return t;}
     static Transaction bank(String amount,String date,String extra){return sms("Centenary","a trxn of "+amount+" on your A/C **123 on "+date+". "+extra,NOW);}

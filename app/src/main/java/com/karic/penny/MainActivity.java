@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
     private void render() {
         int y=scroll.getScrollY();content.removeAllViews();
         LinearLayout head=row();TextView brand=text("penny",32,INK,true);head.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
-        Button menu=new Button(this);menu.setText("⋮");menu.setContentDescription("Settings and SMS tools");head.addView(menu,new LinearLayout.LayoutParams(dp(56),dp(48)));menu.setOnClickListener(v->menu(menu));content.addView(head);
+        TextView menu=text("⋮",26,GREEN,true);menu.setGravity(Gravity.CENTER);menu.setBackground(bg(0xffe0ede4));menu.setContentDescription("Settings and SMS tools");head.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48)));menu.setOnClickListener(v->menu(menu));content.addView(head);
         label(content,"Your accounts. Your money story.",15,MUTED);
         label(content,(permission(Manifest.permission.RECEIVE_SMS)?"● SMS listening":"○ SMS access off")+"   ·   On-device only",12,GREEN);
         if(busy)label(content,"Importing financial SMS…",14,AMBER);
@@ -64,25 +64,36 @@ public class MainActivity extends Activity {
         if(!error.isEmpty())label(content,error,13,0xffa13d36);
         heading("Last reported balances",20);
         LinearLayout hero=card(content,0xff15543b);
-        BigDecimal combined=BigDecimal.ZERO;int known=0;long oldest=Long.MAX_VALUE,newest=0;Set<String> types=new HashSet<>();
+        GradientDrawable gradient=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xff0b392b,0xff17694c});
+        gradient.setCornerRadius(dp(22));hero.setBackground(gradient);
+        BigDecimal combined=BigDecimal.ZERO;int known=0,included=0,excluded=0;long oldest=Long.MAX_VALUE,newest=0;Set<String> types=new HashSet<>();
         boolean identifiers=true;
         for(Ledger.Account a:ledger.accounts.values()) {
-            identifiers&=a.identifierKnown;
+            if(!includesBalance(a)){if(a.latest!=null)excluded++;continue;}
+            included++;
+            identifiers&=a.identifierKnown || !accountNumber(a).isEmpty();
             if(a.latest!=null){known++;combined=combined.add(a.latest.value);oldest=Math.min(oldest,a.latest.at);newest=Math.max(newest,a.latest.at);types.add(a.latest.type);}
         }
-        boolean complete=known==ledger.accounts.size()&&identifiers;
+        boolean complete=known>0&&known==included&&identifiers&&excluded==0;
         label(hero,complete?"COMBINED LAST-REPORTED BALANCE":"PARTIAL LAST-REPORTED TOTAL",11,0xffc7dfcb);
         label(hero,known==0?"Balance unavailable":money(combined),30,0xffffffff,true);
-        label(hero,known+" of "+ledger.accounts.size()+" account slots have a balance"+(complete?"":" • incomplete"),12,0xffd6ead9);
+        label(hero,known+" of "+included+" selected accounts have a balance",12,0xffd6ead9);
         if(known>0)label(hero,"Reports: "+date(oldest)+ (!date(newest).equals(date(oldest))?" – "+date(newest):"")+" EAT",12,0xffd6ead9);
         label(hero,"SMS snapshots, not live balances"+(types.size()>1?" • mixed balance types":""),12,0xffd6ead9);
-        if(!identifiers)label(hero,"Some account identifiers are missing; multiple wallets cannot be distinguished.",12,0xffd6ead9);
+        if(!identifiers)label(hero,"Some included balances have no account number in the SMS.",12,0xffd6ead9);
+        if(excluded>0)label(hero,excluded+" reported balances excluded. Use Edit on an account to review.",12,0xffd6ead9);
         for(Ledger.Account a:ledger.accounts.values()) {
             LinearLayout c=card(content,0xffffffff);
-            label(c,a.label,16,INK,true);
+            label(c,a.kind.toUpperCase(Locale.ROOT),11,GREEN,true);
+            LinearLayout title=row();title.setGravity(Gravity.CENTER_VERTICAL);
+            title.addView(text(accountLabel(a),16,INK,true),new LinearLayout.LayoutParams(0,-2,1));
+            TextView edit=text("Edit",13,GREEN,true);edit.setGravity(Gravity.CENTER);edit.setBackground(bg(0xffe0ede4));
+            edit.setContentDescription("Edit "+accountLabel(a));title.addView(edit,new LinearLayout.LayoutParams(dp(56),dp(48)));
+            edit.setOnClickListener(v->editAccount(a));c.addView(title);
             label(c,a.latest==null?"Balance unavailable":money(a.latest.value),25,INK,true);
             if(a.latest!=null){label(c,"Last reported balance • "+a.latest.type,12,MUTED);label(c,date(a.latest.at)+" EAT • "+freshness(a.latest.at),12,MUTED);label(c,a.latest.timeSource,11,MUTED);}
             for(Ledger.Balance b:a.byType.values())if(b!=a.latest)label(c,b.type+": "+money(b.value)+" • "+date(b.at)+" EAT",12,MUTED);
+            if(!includesBalance(a))label(c,"Excluded from combined balance",12,AMBER);
             if(!a.warnings.isEmpty())label(c,"Review: "+a.warnings.iterator().next(),12,AMBER);
         }
         heading("Money movement",20);
@@ -110,6 +121,42 @@ public class MainActivity extends Activity {
         if(total==0)label(content,"No financial SMS in this period. Choose another period or import from the menu.",14,MUTED);
         if(total>limit)button(content,"Show more ("+total+" records)",()->{limit+=40;render();});
         scroll.post(()->scroll.scrollTo(0,y));
+    }
+    private SharedPreferences accountSettings() {
+        return getSharedPreferences("accounts",MODE_PRIVATE);
+    }
+    private String accountNumber(Ledger.Account account) {
+        return accountSettings().getString(account.key+".number","");
+    }
+    private String accountLabel(Ledger.Account account) {
+        String name=accountSettings().getString(account.key+".name","");
+        String number=accountNumber(account);
+        String[] parts=account.label.split(" • ",2);
+        String suffix=number.isEmpty()?(parts.length==2?" • "+parts[1]:""):" • "+Transaction.mask(number);
+        return (name.isEmpty()?parts[0]:name)+suffix;
+    }
+    private boolean includesBalance(Ledger.Account account) {
+        boolean defaultIncluded=account.identifierKnown || ("Mobile Money".equals(account.kind)
+                && ledger.accounts.values().stream().noneMatch(a->a.identifierKnown && a.kind.equals(account.kind)));
+        return accountSettings().getBoolean(account.key+".included",defaultIncluded);
+    }
+    private void editAccount(Ledger.Account account) {
+        LinearLayout form=new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);form.setPadding(dp(22),dp(12),dp(22),dp(8));
+        EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Account name");
+        name.setText(accountSettings().getString(account.key+".name",""));form.addView(name);
+        EditText number=new EditText(this);number.setSingleLine(true);number.setHint("Account or phone number");
+        number.setInputType(android.text.InputType.TYPE_CLASS_PHONE);number.setText(accountNumber(account));form.addView(number);
+        CheckBox included=new CheckBox(this);included.setText("Include in combined balance");
+        included.setChecked(includesBalance(account));form.addView(included);
+        label(form,"Only include this balance if it belongs to a separate account. The name and masked number are saved on this phone.",13,MUTED);
+        new AlertDialog.Builder(this).setTitle(account.label).setView(form).setNegativeButton("Cancel",null)
+                .setPositiveButton("Save",(dialog,which)->{
+                    accountSettings().edit().putString(account.key+".name",name.getText().toString().trim())
+                            .putString(account.key+".number",number.getText().toString().replaceAll("[^0-9]",""))
+                            .putBoolean(account.key+".included",included.isChecked()).apply();
+                    render();
+                }).show();
     }
     private void metric(LinearLayout parent,String title,BigDecimal amount,int color) {
         LinearLayout c=new LinearLayout(this);c.setOrientation(1);c.setPadding(dp(12),dp(13),dp(8),dp(13));c.setBackground(bg(0xffffffff));

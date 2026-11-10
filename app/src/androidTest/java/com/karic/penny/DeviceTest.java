@@ -42,6 +42,7 @@ public class DeviceTest extends InstrumentationTestCase {
         SimpleDateFormat fmt=new SimpleDateFormat("dd-MM-yyyy 'at' HH:mm",Locale.US);fmt.setTimeZone(TimeZone.getTimeZone("Africa/Kampala"));String date=fmt.format(new Date(now));
         try(PennyDatabase db=new PennyDatabase(context)) {
             db.insertSms("Centenary","a trxn of -10,000 on your A/C **123 on "+date+". Bal:50,621. Ref: TESTBANK01",now);
+            db.insertSms("Centenary Bank","Balance: 11,163",now+2000);
             db.insertSms("MTN","MTN has deducted UGX 6500 at a fee of UGX 0. Transaction ID: TEST9000001. Message: Bundle Purchase. New balance is:UGX 4663",now);
             db.insertSms("MTN","MTN has deducted UGX 6500 at a fee of UGX 0. Transaction ID: TEST9000001. Message: Bundle Purchase. New balance is:UGX 4663.36",now+1000);
             db.markImport(System.currentTimeMillis());

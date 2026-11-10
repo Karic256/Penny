@@ -20,7 +20,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
-    private static final int PERMISSION=101,EXPORT=102;
+    private static final int PERMISSION=101,EXPORT=102,EXPORT_CHATGPT=103;
     private static final int GREEN=0xff146446,INK=0xff173c2c,MUTED=0xff61766a,CREAM=0xfff4f7f2,AMBER=0xff98632e;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final TimeZone zone=TimeZone.getTimeZone("Africa/Kampala");
@@ -136,8 +136,11 @@ public class MainActivity extends Activity {
         return (name.isEmpty()?parts[0]:name)+suffix;
     }
     private boolean includesBalance(Ledger.Account account) {
+        return includesBalance(account, ledger);
+    }
+    private boolean includesBalance(Ledger.Account account, Ledger data) {
         boolean defaultIncluded=account.identifierKnown || ("Mobile Money".equals(account.kind)
-                && ledger.accounts.values().stream().noneMatch(a->a.identifierKnown && a.kind.equals(account.kind)));
+                && data.accounts.values().stream().noneMatch(a->a.identifierKnown && a.kind.equals(account.kind)));
         return accountSettings().getBoolean(account.key+".included",defaultIncluded);
     }
     private void editAccount(Ledger.Account account) {
@@ -228,9 +231,9 @@ public class MainActivity extends Activity {
     }
     private void change(Runnable action) {worker.execute(()->{try{action.run();runOnUiThread(this::reload);}catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Change failed; records were not updated",Toast.LENGTH_LONG).show());}});}
     private void menu(View anchor) {
-        PopupMenu p=new PopupMenu(this,anchor);String[] items={"Import financial SMS","SMS permissions","Export SMS ledger (CSV)","Review flagged records","Privacy and history"};
+        PopupMenu p=new PopupMenu(this,anchor);String[] items={"Import financial SMS","SMS permissions","Export SMS ledger (CSV)","Review flagged records","Privacy and history","Export for ChatGPT (CSV)"};
         for(int i=0;i<items.length;i++)p.getMenu().add(0,i,i,items[i]);
-        p.setOnMenuItemClickListener(item->{switch(item.getItemId()){case 0:importSms();break;case 1:requestPermissions(new String[]{Manifest.permission.READ_SMS,Manifest.permission.RECEIVE_SMS},PERMISSION);break;case 2:Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.setType("text/csv");intent.addCategory(Intent.CATEGORY_OPENABLE);intent.putExtra(Intent.EXTRA_TITLE,"penny-sms-ledger.csv");startActivityForResult(intent,EXPORT);break;case 3:reviewList();break;default:new AlertDialog.Builder(this).setTitle("Local SMS ledger").setMessage("Penny has no internet permission. Supported financial SMS and corrections stay on this phone; Android backups are disabled. No email import.\n\nBalances are the last reliable explicit reports, never live. Unknown wallet identifiers are grouped by provider and can be ambiguous.\n\nHistory may be incomplete: deleted SMS, other providers, cash activity and unreported fees are not inferred.\n\n"+legacy+" legacy records are preserved separately and excluded. Reimport SMS after upgrading. If the source SMS was deleted, those records cannot be reconstructed.").setPositiveButton("Close",null).show();}return true;});p.show();
+        p.setOnMenuItemClickListener(item->{switch(item.getItemId()){case 0:importSms();break;case 1:requestPermissions(new String[]{Manifest.permission.READ_SMS,Manifest.permission.RECEIVE_SMS},PERMISSION);break;case 2:chooseExportFile("penny-sms-ledger.csv", EXPORT);break;case 3:reviewList();break;case 5:chooseExportFile("penny-chatgpt-report.csv", EXPORT_CHATGPT);break;default:new AlertDialog.Builder(this).setTitle("Local SMS ledger").setMessage("Penny has no internet permission. Supported financial SMS and corrections stay on this phone; Android backups are disabled. No email import.\n\nBalances are the last reliable explicit reports, never live. Unknown wallet identifiers are grouped by provider and can be ambiguous.\n\nHistory may be incomplete: deleted SMS, other providers, cash activity and unreported fees are not inferred.\n\n"+legacy+" legacy records are preserved separately and excluded. Reimport SMS after upgrading. If the source SMS was deleted, those records cannot be reconstructed.").setPositiveButton("Close",null).show();}return true;});p.show();
     }
     private void reviewList() {
         List<Ledger.Entry> flagged=new ArrayList<>();for(Ledger.Entry e:ledger.entries)if(!e.warnings.isEmpty())flagged.add(e);
@@ -256,7 +259,34 @@ public class MainActivity extends Activity {
         });
     }
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==PERMISSION){notice=permission(Manifest.permission.READ_SMS)?"SMS access granted. Choose Import financial SMS from the menu.":"SMS access denied. Existing local records remain available.";render();}}
-    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==EXPORT&&result==RESULT_OK&&data!=null&&data.getData()!=null)export(data.getData());}
+    private void chooseExportFile(String name, int request) {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.setType("text/csv");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.putExtra(Intent.EXTRA_TITLE, name);
+        startActivityForResult(intent, request);
+    }
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (result != RESULT_OK || data == null || data.getData() == null) return;
+        if (request == EXPORT) export(data.getData());
+        if (request == EXPORT_CHATGPT) exportForChatGpt(data.getData());
+    }
+    private void exportForChatGpt(Uri uri) {
+        worker.execute(() -> {
+            try (PennyDatabase db = new PennyDatabase(this)) {
+                Ledger data = db.ledger();
+                String report = ChatGptReport.csv(data, account -> includesBalance(account, data));
+                try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+                    if (out == null) throw new IllegalStateException("Export file unavailable");
+                    out.write(report.getBytes(StandardCharsets.UTF_8));
+                }
+                runOnUiThread(() -> Toast.makeText(this, "ChatGPT report saved", Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Export failed", Toast.LENGTH_LONG).show());
+            }
+        });
+    }
     private void export(Uri uri) {
         final Ledger data=ledger;
         worker.execute(()->{

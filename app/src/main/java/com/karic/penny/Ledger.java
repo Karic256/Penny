@@ -23,6 +23,10 @@ public final class Ledger {
         public final Set<String> warnings = new LinkedHashSet<>();
         public final List<Balance> reports = new ArrayList<>();
         public String accountKey() { return t.accountKey(); }
+        public boolean countsFee() {
+            return !conflict && (status == Transaction.Status.COMPLETED || status == Transaction.Status.REVERSED)
+                    && !feeRefunded && fee != null;
+        }
         public boolean credit() { return "IN".equals(direction); }
         public boolean counted() { return !conflict && status==Transaction.Status.COMPLETED && amount!=null && direction!=null; }
     }
@@ -239,7 +243,7 @@ public final class Ledger {
                 }
             }
             // A reversal refunds principal, not necessarily its explicit fee.
-            if(!e.conflict&&(e.status==Transaction.Status.COMPLETED||e.status==Transaction.Status.REVERSED)&&!e.feeRefunded&&e.fee!=null) {
+            if(e.countsFee()) {
                 s.fees=s.fees.add(e.fee);add(s.categories,"Fees",e.fee);add(s.accounts,e.t.displayAccount(),e.fee);
             }
         }

@@ -32,7 +32,9 @@ Tap a record to inspect every original SMS and parsed field, correct the categor
 
 The old schema discarded SMS bodies and represented unknown balances as zero. Database v2 preserves the old `transactions` archive but excludes it, including email receipts, from the SMS dashboard. Choose **⋮ → SMS permissions → Import financial SMS** to reconstruct accounts. Deleted source SMS cannot be reconstructed. Import/parsing run off the UI thread; inbox scans are atomic.
 
-The compact menu also provides CSV export, flagged-record review and privacy/history information. CSV contains reconciled records and notes; full SMS bodies stay local. Installing updates requires the same signing certificate; GitHub's default debug key is not durable release signing. Export records before reinstalling or changing signing keys.
+The compact menu also provides CSV export, flagged-record review and privacy/history information. CSV contains reconciled records and notes; full SMS bodies stay local. Choose **⋮ → Export for ChatGPT (CSV)** to save a separate report with bank and Mobile Money balance snapshots and categorized transactions. Upload that CSV to a chat to analyze it. The report uses temporary account labels and omits account numbers, transaction references, descriptions and SMS text.
+
+Installing updates requires the same signing certificate; GitHub's default debug key is not durable release signing. Export records before reinstalling or changing signing keys.
 
 ## Build and validation
 
